@@ -1,23 +1,21 @@
+// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
+  
   modules: [
     '@nuxtjs/tailwindcss',
-    '@nuxtjs/color-mode'
   ],
-  css: ['~/assets/css/main.css'],
-  colorMode: {
-    preference: 'dark',
-    fallback: 'dark',
-    classSuffix: ''
-  },
+
   runtimeConfig: {
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api'
+      apiUrl: process.env.NUXT_PUBLIC_API_URL || 'http://localhost:8000'
     }
   },
-  nitro: {
-    experimental: {
-      wasm: true
+
+  app: {
+    head: {
+      charset: 'utf-8',
+      viewport: 'width=device-width, initial-scale=1',
     }
   }
 })
