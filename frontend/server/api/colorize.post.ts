@@ -1,7 +1,3 @@
-import { promises as fs } from 'fs'
-import { join } from 'path'
-import { tmpdir } from 'os'
-
 export default defineEventHandler(async (event) => {
   try {
     // Parse multipart form data
@@ -50,90 +46,53 @@ export default defineEventHandler(async (event) => {
       }
     }
     
-    // Create temporary files
-    const tempDir = await fs.mkdtemp(join(tmpdir(), 'colorize-'))
-    const inputPath = join(tempDir, 'input.jpg')
-    const outputPath = join(tempDir, 'output.jpg')
+    // Convert file data to FormData for backend API
+    const formData = new FormData()
+    const blob = new Blob([file.data], { type: file.type })
+    formData.append('file', blob, file.filename)
+    
+    // Get backend API URL from config
+    const config = useRuntimeConfig()
+    const apiUrl = config.public.apiUrl || 'http://localhost:8000'
     
     try {
-      // Save uploaded file
-      await fs.writeFile(inputPath, file.data)
+      // Forward request to Python backend
+      const backendResponse = await fetch(`${apiUrl}/colorize`, {
+        method: 'POST',
+        body: formData
+      })
       
-      // For demonstration, we'll create a simple mock colorization
-      // In production, this would call the actual Python colorization model
-      const result = await mockColorization(inputPath, outputPath, parameters)
+      if (!backendResponse.ok) {
+        const error = await backendResponse.json()
+        throw new Error(error.detail || 'Backend colorization failed')
+      }
       
-      // Read the result image
-      const resultBuffer = await fs.readFile(outputPath)
-      const resultBase64 = resultBuffer.toString('base64')
+      const result = await backendResponse.json()
       
-      // Clean up temporary files
-      await fs.unlink(inputPath)
-      await fs.unlink(outputPath)
-      await fs.rmdir(tempDir)
-      
-      // Return success response
+      // Return success response with colorized image from backend
       return {
         success: true,
-        image: `data:image/jpeg;base64,${resultBase64}`,
-        dimensions: result.dimensions,
+        image: result.colorized_image,
         metadata: {
-          processingTime: result.processingTime,
-          parametersUsed: parameters
+          parametersUsed: parameters,
+          message: result.message
         }
       }
       
-    } catch (error) {
-      // Clean up on error
-      try {
-        await fs.unlink(inputPath)
-        await fs.unlink(outputPath)
-        await fs.rmdir(tempDir)
-      } catch (cleanupError) {
-        console.error('Cleanup error:', cleanupError)
-      }
-      throw error
+    } catch (backendError: any) {
+      console.error('Backend API error:', backendError)
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Backend error: ${backendError.message}`
+      })
     }
     
   } catch (error: any) {
     console.error('Colorization API error:', error)
     
-    return {
-      success: false,
-      error: error.message || 'Failed to process image',
-      details: error.stack
-    }
+    throw createError({
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || error.message || 'Failed to process image'
+    })
   }
 })
-
-// Mock colorization function for demonstration
-// In production, this would call the actual Python model
-async function mockColorization(inputPath: string, outputPath: string, parameters: any) {
-  // Simulate processing time
-  await new Promise(resolve => setTimeout(resolve, 2000))
-  
-  // For demo purposes, we'll just copy the input to output
-  // and add some mock metadata
-  const sharp = await import('sharp')
-  
-  // Get image dimensions
-  const metadata = await sharp(inputPath).metadata()
-  
-  // Process image with sharp (simulate colorization)
-  await sharp(inputPath)
-    .modulate({
-      brightness: 1 + (parameters.contrast / 100),
-      saturation: parameters.saturation / 100,
-      hue: parameters.temperature / 100
-    })
-    .jpeg({ quality: 95 })
-    .toFile(outputPath)
-  
-  return {
-    dimensions: {
-      width: metadata.width || 0,
-      height: metadata.height || 0
-    },
-    processingTime: 2.5 // Mock processing time
-  }
-}
