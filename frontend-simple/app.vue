@@ -144,31 +144,60 @@ const colorizeImage = async () => {
   error.value = ''
 
   try {
-    // Using Hugging Face Gradio API
-    const formData = new FormData()
-    formData.append('data', JSON.stringify([selectedFile.value, renderFactor.value]))
-
-    const response = await fetch('https://leonelhs-deoldify.hf.space/api/predict', {
+    // Convert file to base64
+    const base64Image = await fileToBase64(selectedFile.value)
+    
+    // Using Hugging Face Gradio API with proper format
+    const response = await fetch('https://leonelhs-deoldify.hf.space/run/predict', {
       method: 'POST',
-      body: formData
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        data: [
+          base64Image,  // Image as base64 data URL
+          renderFactor.value  // Render factor
+        ]
+      })
     })
 
-    if (!response.ok) throw new Error('Colorization failed')
+    if (!response.ok) {
+      throw new Error(`Server responded with ${response.status}`)
+    }
 
     const result = await response.json()
     
-    // Get the colorized image URL from Gradio response
+    // Gradio returns data in result.data array
     if (result.data && result.data[0]) {
-      colorizedImage.value = `https://leonelhs-deoldify.hf.space/file=${result.data[0]}`
+      // The response should be a base64 image or a URL
+      if (typeof result.data[0] === 'string') {
+        if (result.data[0].startsWith('data:image')) {
+          colorizedImage.value = result.data[0]
+        } else {
+          // It's a file path, construct full URL
+          colorizedImage.value = `https://leonelhs-deoldify.hf.space/file=${result.data[0]}`
+        }
+      } else {
+        throw new Error('Unexpected response format')
+      }
     } else {
-      throw new Error('Unexpected response format')
+      throw new Error('No colorized image in response')
     }
   } catch (e) {
-    error.value = e.message || 'Failed to colorize. Please try again.'
-    console.error(e)
+    error.value = e.message || 'Failed to colorize. The Hugging Face Space might be sleeping or unavailable. Please try again in a moment.'
+    console.error('Colorization error:', e)
   } finally {
     loading.value = false
   }
+}
+
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 const reset = () => {
