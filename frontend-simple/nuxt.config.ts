@@ -15,14 +15,5 @@ export default defineNuxtConfig({
         { name: 'description', content: 'Transform black & white photos into vibrant colors using AI' }
       ]
     }
-  },
-
-  css: [],
-
-  postcss: {
-    plugins: {
-      tailwindcss: {},
-      autoprefixer: {},
-    },
-  },
+  }
 })
