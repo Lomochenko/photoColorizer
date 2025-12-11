@@ -1,10 +1,6 @@
 export default defineNuxtConfig({
   compatibilityDate: '2025-12-11',
   devtools: { enabled: true },
-  
-  modules: [
-    '@nuxtjs/tailwindcss',
-  ],
 
   app: {
     head: {
@@ -15,5 +11,16 @@ export default defineNuxtConfig({
         { name: 'description', content: 'Transform black & white photos into vibrant colors using AI' }
       ]
     }
-  }
+  },
+
+  vite: {
+    css: {
+      postcss: {
+        plugins: {
+          tailwindcss: {},
+          autoprefixer: {},
+        },
+      },
+    },
+  },
 })

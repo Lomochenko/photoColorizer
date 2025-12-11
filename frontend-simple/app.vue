@@ -98,6 +98,8 @@
 </template>
 
 <script setup>
+import '~/assets/css/main.css'
+
 const fileInput = ref(null)
 const selectedImage = ref(null)
 const selectedFile = ref(null)
