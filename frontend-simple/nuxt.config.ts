@@ -13,14 +13,10 @@ export default defineNuxtConfig({
     }
   },
 
-  vite: {
-    css: {
-      postcss: {
-        plugins: {
-          tailwindcss: {},
-          autoprefixer: {},
-        },
-      },
+  postcss: {
+    plugins: {
+      tailwindcss: {},
+      autoprefixer: {},
     },
   },
 })
