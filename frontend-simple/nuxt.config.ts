@@ -1,4 +1,5 @@
 export default defineNuxtConfig({
+  compatibilityDate: '2025-12-11',
   devtools: { enabled: true },
   
   modules: [
@@ -16,7 +17,12 @@ export default defineNuxtConfig({
     }
   },
 
-  tailwindcss: {
-    viewer: false
-  }
+  css: [],
+
+  postcss: {
+    plugins: {
+      tailwindcss: {},
+      autoprefixer: {},
+    },
+  },
 })
