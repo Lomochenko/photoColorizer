@@ -31,18 +31,6 @@
             <img :src="selectedImage" alt="Selected" class="w-full rounded-xl shadow-lg" />
           </div>
 
-          <!-- Quality Slider -->
-          <div class="mb-6">
-            <label class="block text-sm font-semibold text-gray-700 mb-2">
-              Render Quality: {{ renderFactor }}
-            </label>
-            <input v-model.number="renderFactor" type="range" min="10" max="45" class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer" />
-            <div class="flex justify-between text-xs text-gray-500 mt-1">
-              <span>Fast</span>
-              <span>Best Quality</span>
-            </div>
-          </div>
-
           <!-- Action Buttons -->
           <div class="flex gap-4">
             <button @click="colorizeImage" :disabled="loading" class="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 shadow-lg">
@@ -58,13 +46,13 @@
         <div v-if="loading" class="mt-8 text-center">
           <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
           <p class="text-gray-600 font-medium">AI is colorizing your photo...</p>
-          <p class="text-sm text-gray-500 mt-2">This may take 30-90 seconds. First time may take longer as the Space wakes up.</p>
+          <p class="text-sm text-gray-500 mt-2">This usually takes 10-30 seconds</p>
         </div>
 
         <!-- Error Message -->
         <div v-if="error" class="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
           <p class="text-red-700 font-medium">{{ error }}</p>
-          <p class="text-sm text-red-600 mt-2">Try visiting <a href="https://jaysadatay-deoldify.hf.space" target="_blank" class="underline">the Space</a> directly first to wake it up, then try again.</p>
+          <p class="text-sm text-red-600 mt-2">Try visiting <a href="https://leonelhs-deoldify.hf.space" target="_blank" class="underline">the Space</a> directly first to wake it up, then try again.</p>
         </div>
 
         <!-- Results -->
@@ -93,7 +81,7 @@
       <!-- Footer Info -->
       <div class="mt-8 text-center text-gray-600 text-sm">
         <p>Powered by DeOldify AI Model via Hugging Face 🤗</p>
-        <p class="mt-2 text-xs">Using Space: <a href="https://huggingface.co/spaces/jaysadatay/deoldify" target="_blank" class="text-purple-600 hover:underline">jaysadatay/deoldify</a></p>
+        <p class="mt-2 text-xs">Using Space: <a href="https://huggingface.co/spaces/leonelhs/deoldify" target="_blank" class="text-purple-600 hover:underline">leonelhs/deoldify</a></p>
       </div>
     </div>
   </div>
@@ -106,7 +94,6 @@ const fileInput = ref(null)
 const selectedImage = ref(null)
 const selectedFile = ref(null)
 const colorizedImage = ref(null)
-const renderFactor = ref(35)
 const loading = ref(false)
 const error = ref('')
 
@@ -146,101 +133,95 @@ const colorizeImage = async () => {
   error.value = ''
 
   try {
-    // Use Gradio client library approach
+    // Step 1: Upload the file
     const formData = new FormData()
     formData.append('files', selectedFile.value)
     
-    // First, upload the file
-    const uploadResponse = await fetch('https://jaysadatay-deoldify.hf.space/upload', {
+    const uploadResponse = await fetch('https://leonelhs-deoldify.hf.space/upload', {
       method: 'POST',
       body: formData
     })
 
     if (!uploadResponse.ok) {
-      throw new Error(`Upload failed: ${uploadResponse.status}. The Space may be sleeping.`)
+      throw new Error(`Upload failed with status ${uploadResponse.status}. The Space might be sleeping - please visit it directly first.`)
     }
 
-    const uploadData = await uploadResponse.json()
-    const fileUrl = uploadData[0]
+    const uploadResult = await uploadResponse.json()
+    const fileData = uploadResult[0]
 
-    // Then, call the predict endpoint
-    const predictResponse = await fetch('https://jaysadatay-deoldify.hf.space/call/predict', {
+    // Step 2: Call the predict function
+    const predictResponse = await fetch('https://leonelhs-deoldify.hf.space/call/predict', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        data: [
-          { path: fileUrl },
-          renderFactor.value
-        ]
+        data: [fileData]
       })
     })
 
     if (!predictResponse.ok) {
-      throw new Error(`Prediction failed: ${predictResponse.status}`)
+      throw new Error(`Prediction failed with status ${predictResponse.status}`)
     }
 
-    const predictData = await predictResponse.json()
-    const eventId = predictData.event_id
+    const predictResult = await predictResponse.json()
+    const eventId = predictResult.event_id
 
-    // Poll for results
-    const result = await pollForResult(eventId)
-    
-    if (result && result.data && result.data[0]) {
-      const resultPath = result.data[0].path || result.data[0]
-      colorizedImage.value = `https://jaysadatay-deoldify.hf.space/file=${resultPath}`
-    } else {
-      throw new Error('No colorized image in response')
-    }
+    // Step 3: Stream the results
+    await streamResults(eventId)
+
   } catch (e) {
-    error.value = e.message || 'Failed to colorize. The Hugging Face Space might be sleeping or unavailable.'
-    console.error('Colorization error:', e)
+    error.value = e.message || 'Colorization failed. Please try again.'
+    console.error('Error:', e)
   } finally {
     loading.value = false
   }
 }
 
-const pollForResult = async (eventId, maxAttempts = 60) => {
-  for (let i = 0; i < maxAttempts; i++) {
-    try {
-      const response = await fetch(`https://jaysadatay-deoldify.hf.space/call/predict/${eventId}`)
-      if (!response.ok) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        continue
-      }
-      
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              if (data.msg === 'process_completed') {
-                return data.output
-              }
-            } catch (e) {
-              // Skip invalid JSON
+const streamResults = async (eventId) => {
+  const response = await fetch(`https://leonelhs-deoldify.hf.space/call/predict/${eventId}`)
+  
+  if (!response.ok) {
+    throw new Error(`Failed to get results: ${response.status}`)
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    const chunk = decoder.decode(value)
+    const lines = chunk.split('\n')
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6))
+          
+          if (data.msg === 'process_completed') {
+            // Success! Get the image
+            const outputData = data.output.data[0]
+            if (outputData.url) {
+              colorizedImage.value = outputData.url
+            } else if (outputData.path) {
+              colorizedImage.value = `https://leonelhs-deoldify.hf.space/file=${outputData.path}`
             }
+            return
+          } else if (data.msg === 'error') {
+            throw new Error(data.error || 'Processing failed')
           }
+        } catch (e) {
+          if (e instanceof SyntaxError) {
+            // Ignore JSON parse errors
+            continue
+          }
+          throw e
         }
       }
-    } catch (e) {
-      console.error('Polling error:', e)
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 1000))
   }
-  
-  throw new Error('Timeout waiting for colorization')
 }
 
 const reset = () => {
