@@ -58,12 +58,13 @@
         <div v-if="loading" class="mt-8 text-center">
           <div class="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
           <p class="text-gray-600 font-medium">AI is colorizing your photo...</p>
-          <p class="text-sm text-gray-500 mt-2">This may take 30-60 seconds</p>
+          <p class="text-sm text-gray-500 mt-2">This may take 30-90 seconds. First time may take longer as the Space wakes up.</p>
         </div>
 
         <!-- Error Message -->
         <div v-if="error" class="mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
           <p class="text-red-700 font-medium">{{ error }}</p>
+          <p class="text-sm text-red-600 mt-2">Try visiting <a href="https://jaysadatay-deoldify.hf.space" target="_blank" class="underline">the Space</a> directly first to wake it up, then try again.</p>
         </div>
 
         <!-- Results -->
@@ -92,6 +93,7 @@
       <!-- Footer Info -->
       <div class="mt-8 text-center text-gray-600 text-sm">
         <p>Powered by DeOldify AI Model via Hugging Face 🤗</p>
+        <p class="mt-2 text-xs">Using Space: <a href="https://huggingface.co/spaces/jaysadatay/deoldify" target="_blank" class="text-purple-600 hover:underline">jaysadatay/deoldify</a></p>
       </div>
     </div>
   </div>
@@ -144,60 +146,101 @@ const colorizeImage = async () => {
   error.value = ''
 
   try {
-    // Convert file to base64
-    const base64Image = await fileToBase64(selectedFile.value)
+    // Use Gradio client library approach
+    const formData = new FormData()
+    formData.append('files', selectedFile.value)
     
-    // Using Hugging Face Gradio API with proper format
-    const response = await fetch('https://leonelhs-deoldify.hf.space/run/predict', {
+    // First, upload the file
+    const uploadResponse = await fetch('https://jaysadatay-deoldify.hf.space/upload', {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Upload failed: ${uploadResponse.status}. The Space may be sleeping.`)
+    }
+
+    const uploadData = await uploadResponse.json()
+    const fileUrl = uploadData[0]
+
+    // Then, call the predict endpoint
+    const predictResponse = await fetch('https://jaysadatay-deoldify.hf.space/call/predict', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         data: [
-          base64Image,  // Image as base64 data URL
-          renderFactor.value  // Render factor
+          { path: fileUrl },
+          renderFactor.value
         ]
       })
     })
 
-    if (!response.ok) {
-      throw new Error(`Server responded with ${response.status}`)
+    if (!predictResponse.ok) {
+      throw new Error(`Prediction failed: ${predictResponse.status}`)
     }
 
-    const result = await response.json()
+    const predictData = await predictResponse.json()
+    const eventId = predictData.event_id
+
+    // Poll for results
+    const result = await pollForResult(eventId)
     
-    // Gradio returns data in result.data array
-    if (result.data && result.data[0]) {
-      // The response should be a base64 image or a URL
-      if (typeof result.data[0] === 'string') {
-        if (result.data[0].startsWith('data:image')) {
-          colorizedImage.value = result.data[0]
-        } else {
-          // It's a file path, construct full URL
-          colorizedImage.value = `https://leonelhs-deoldify.hf.space/file=${result.data[0]}`
-        }
-      } else {
-        throw new Error('Unexpected response format')
-      }
+    if (result && result.data && result.data[0]) {
+      const resultPath = result.data[0].path || result.data[0]
+      colorizedImage.value = `https://jaysadatay-deoldify.hf.space/file=${resultPath}`
     } else {
       throw new Error('No colorized image in response')
     }
   } catch (e) {
-    error.value = e.message || 'Failed to colorize. The Hugging Face Space might be sleeping or unavailable. Please try again in a moment.'
+    error.value = e.message || 'Failed to colorize. The Hugging Face Space might be sleeping or unavailable.'
     console.error('Colorization error:', e)
   } finally {
     loading.value = false
   }
 }
 
-const fileToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
+const pollForResult = async (eventId, maxAttempts = 60) => {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const response = await fetch(`https://jaysadatay-deoldify.hf.space/call/predict/${eventId}`)
+      if (!response.ok) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        continue
+      }
+      
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              if (data.msg === 'process_completed') {
+                return data.output
+              }
+            } catch (e) {
+              // Skip invalid JSON
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Polling error:', e)
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+  
+  throw new Error('Timeout waiting for colorization')
 }
 
 const reset = () => {
