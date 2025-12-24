@@ -1,0 +1,13 @@
+torch~=2.5.1
+torchvision~=0.20.1
+numpy~=1.24.3
+pillow~=9.5.0
+opencv-python~=4.10.0.84
+scipy~=1.13.1
+fastprogress~=1.0.3
+deoldify~=0.0.1
+matplotlib~=3.9.3
+
+
+
+
