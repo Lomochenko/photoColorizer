@@ -1,3 +1,4 @@
+deployed on hugging face: https://huggingface.co/spaces/allinaseri/colorizeMe
 ---
 title: DeOldify + Embedded Space
 sdk: gradio
