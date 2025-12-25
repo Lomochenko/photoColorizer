@@ -1,18 +1,7 @@
 deployed on hugging face: https://huggingface.co/spaces/allinaseri/colorizeMe
 ---
-title: DeOldify + Embedded Space
-sdk: gradio
-app_file: app.py
-pinned: false
-emoji: 🐨
----
-title: Deoldify
-emoji: 🐨
-colorFrom: gray
-colorTo: indigo
-sdk: gradio
-sdk_version: 5.45.0
-app_file: app.py
-pinned: false
-license: mit
-short_description: Colorize and restore old images
+Colorize grayscale(black/white) images using DeOldify.
+
+1. Upload a grayscale image
+2. Tune the render factor
+3. Download the colorized output
